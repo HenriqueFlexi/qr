@@ -20,51 +20,41 @@ function iniciarLeitor() {
 
                 currentUser = obj;
 
-                const resp = await fetch("/verificar", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        data: dataHoje(),
-                        id: obj.id,
-                        nome: obj.nome
-                    })
-                });
-
-                const result = await resp.json();
-
-                const isSaida = result.aberto;
-                const buttonText = isSaida ? "Registrar Saída" : "Registrar";
-                const selectedArea = isSaida ? result.area : "";
-                const selectedProjeto = isSaida ? result.projeto : "";
-                const numeroProjetoValue = isSaida ? result.numeroProjeto : "";
+                // No need to verify open entries, always allow new registration
 
                 formContainer.innerHTML = `
-                    <p>Olá, ${obj.nome}${isSaida ? '. Você já registrou a entrada hoje.' : ''}</p>
+                    <p>Olá, ${obj.nome}. Registre seu horário de trabalho.</p>
                     <form id="registroForm" novalidate>
                         <input type="hidden" id="funcionarioId" name="id" value="${obj.id}">
 
                         <label for="area">Área:</label>
                         <select id="area" name="area" required>
-                            <option value="" disabled ${!isSaida ? 'selected' : ''}>Selecione uma área</option>
-                            ${AREAS.map(area => `<option value="${area}" ${area === selectedArea ? 'selected' : ''}>${area}</option>`).join('')}
+                            <option value="" disabled selected>Selecione uma área</option>
+                            ${AREAS.map(area => `<option value="${area}">${area}</option>`).join('')}
                         </select>
 
                         <label for="projeto">Projeto:</label>
                         <select id="projeto" name="projeto" required>
-                            <option value="" disabled ${!isSaida ? 'selected' : ''}>Selecione um projeto</option>
-                            ${PROJETOS.map(proj => `<option value="${proj}" ${proj === selectedProjeto ? 'selected' : ''}>${proj}</option>`).join('')}
+                            <option value="" disabled selected>Selecione um projeto</option>
+                            ${PROJETOS.map(proj => `<option value="${proj}">${proj}</option>`).join('')}
                         </select>
 
                         <label for="numeroProjeto">Número do Projeto:</label>
-                        <input type="text" id="numeroProjeto" name="numeroProjeto" value="${numeroProjetoValue}" required>
+                        <input type="text" id="numeroProjeto" name="numeroProjeto" required>
 
-                        <button type="submit" disabled>${buttonText}</button>
+                        <label for="horaInicio">Hora de Início:</label>
+                        <input type="time" id="horaInicio" name="horaInicio" required>
+
+                        <label for="horaFim">Hora de Fim:</label>
+                        <input type="time" id="horaFim" name="horaFim" required>
+
+                        <button type="submit" disabled>Registrar</button>
                     </form>
                 `;
 
                 const form = document.getElementById("registroForm");
                 const button = form.querySelector("button");
-                const inputs = [form.area, form.projeto, form.numeroProjeto];
+                const inputs = [form.horaInicio, form.horaFim, form.area, form.projeto, form.numeroProjeto];
 
                 function validarFormulario() {
                     const valido = inputs.every(input => input.value.trim() !== "");
@@ -99,6 +89,8 @@ async function enviarFormulario(e) {
         data: dataHoje(),
         id: currentUser.id,
         nome: currentUser.nome,
+        horaInicio: document.getElementById("horaInicio").value,
+        horaFim: document.getElementById("horaFim").value,
         area: document.getElementById("area").value,
         projeto: document.getElementById("projeto").value,
         numeroProjeto: document.getElementById("numeroProjeto").value
