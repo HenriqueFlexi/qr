@@ -1,13 +1,19 @@
 from flask import Flask, request, render_template, jsonify, Response
 from openpyxl import Workbook, load_workbook
-from openpyxl.chart import BarChart, Reference
+from openpyxl.chart import BarChart, Reference, DoughnutChart
 import os
 import json
 from datetime import datetime
+from supabase import create_client, Client
 
 app = Flask(__name__)
 
 EXCEL_FILE = "registros.xlsx"
+
+# Supabase configuration
+SUPABASE_URL = "https://jgsqcgkdfbwzodnidbib.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impnc3FjZ2tkZmJ3em9kbmlkYmliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDI3MzMsImV4cCI6MjA3NjA3ODczM30.qk_BzPtVG9MDqrlZ7zb8LZYkD-IZRXRrVm6-TEOKJGk"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 def load_config():
     with open('config.json', 'r', encoding='utf-8') as f:
@@ -35,11 +41,12 @@ def save_orcamentos(orcamentos):
     with open('orcamentos.json', 'w', encoding='utf-8') as f:
         json.dump(orcamentos, f, ensure_ascii=False, indent=2)
 
-global AREAS, PROJETOS
+global AREAS, PROJETOS, CHARTS
 
 config = load_config()
 AREAS = config['areas']
 PROJETOS = config['projetos']
+CHARTS = config.get('charts', ['bar'])
 
 def criar_planilha_se_nao_existir():
     if not os.path.exists(EXCEL_FILE):
@@ -61,15 +68,15 @@ def criar_planilha_se_nao_existir():
 
         # Criar aba de gráficos
         ws_chart = wb.create_sheet("Gráficos")
-        ws_chart.append(["Área/Projeto", "Horas Trabalhadas", "Horas Orçadas", "Horas Restantes"])
+        ws_chart.append(["Área/Projeto", "Horas Trabalhadas", "Horas Orçadas", "Horas Restantes", "Percentual (%)"])
         # Formatar cabeçalhos
         from openpyxl.styles import Font, Alignment
-        for col_num, header in enumerate(["Área/Projeto", "Horas Trabalhadas", "Horas Orçadas", "Horas Restantes"], 1):
+        for col_num, header in enumerate(["Área/Projeto", "Horas Trabalhadas", "Horas Orçadas", "Horas Restantes", "Percentual (%)"], 1):
             cell = ws_chart.cell(row=1, column=col_num)
             cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal='center')
         # Ajustar larguras das colunas
-        column_widths = [30, 15, 15, 15]
+        column_widths = [30, 15, 15, 15, 15]
         for i, width in enumerate(column_widths, 1):
             ws_chart.column_dimensions[ws_chart.cell(row=1, column=i).column_letter].width = width
 
@@ -126,53 +133,39 @@ def registrar():
     hoje = data.get("data")
     idf = data.get("id")
     nome = data.get("nome")
+    hora_inicio = data.get("horaInicio")
+    hora_fim = data.get("horaFim")
     area = data.get("area")
     projeto = data.get("projeto")
     numero = data.get("numeroProjeto")
-    hora_atual = datetime.now().strftime("%H:%M")
-    acao = ""
 
-    # Busca se já há um registro de entrada sem hora de saída hoje
-    linha_encontrada = None
-    for row in ws.iter_rows(min_row=2, values_only=False):
-        c_data = row[0].value
-        c_id = row[1].value
-        c_nome = row[2].value
-        c_area = row[3].value
-        c_proj = row[4].value
-        c_num = row[5].value
-        c_inicio = row[6].value
-        c_fim = row[7].value
-
-        if (
-            c_data == hoje and
-            c_id == idf and
-            c_nome == nome and
-            c_area == area and
-            c_proj == projeto and
-            c_num == numero and
-            c_inicio and not c_fim
-        ):
-            linha_encontrada = row
-            break
-
-    if linha_encontrada:
-        # Registrar como saída
-        linha_encontrada[7].value = hora_atual
-        linha_encontrada[8].value = "saída"
-        acao = "saída"
-    else:
-        # Novo registro de entrada
-        nova_linha = [
-            hoje, idf, nome, area, projeto, numero, hora_atual, "", "entrada"
-        ]
-        ws.append(nova_linha)
-        acao = "entrada"
+    # Always create a new row with provided start and end times
+    nova_linha = [
+        hoje, idf, nome, area, projeto, numero, hora_inicio, hora_fim, "registro"
+    ]
+    ws.append(nova_linha)
 
     try:
         wb.save(EXCEL_FILE)
         atualizar_graficos()
-        return jsonify({"status": "ok", "acao": acao})
+
+        # Sync to Supabase for testing
+        try:
+            supabase.table('registros').insert({
+                'data': hoje,
+                'id': idf,
+                'nome': nome,
+                'area': area,
+                'projeto': projeto,
+                'numero_projeto': numero,
+                'hora_inicio': hora_inicio,
+                'hora_fim': hora_fim,
+                'acao': "registro"
+            }).execute()
+        except Exception as e:
+            print(f"Erro ao sincronizar com Supabase: {e}")
+
+        return jsonify({"status": "ok", "acao": "registro"})
     except PermissionError:
         return jsonify({"status": "error", "message": "Erro ao salvar no Excel. Verifique se o arquivo está aberto."})
 
@@ -181,9 +174,11 @@ def config_js():
     import json
     areas_json = json.dumps(AREAS)
     projetos_json = json.dumps(PROJETOS)
+    charts_json = json.dumps(CHARTS)
     js_code = f"""
     var AREAS = {areas_json};
     var PROJETOS = {projetos_json};
+    var CHARTS = {charts_json};
     """
     return Response(js_code, mimetype='application/javascript')
 
@@ -282,6 +277,15 @@ def add_orcamento():
     atualizar_graficos()
     return jsonify({"status": "ok"})
 
+@app.route('/admin/select_charts', methods=['POST'])
+def select_charts():
+    data = request.get_json()
+    charts = data.get('charts', [])
+    config['charts'] = charts
+    save_config(config)
+    CHARTS[:] = charts
+    return jsonify({"status": "ok"})
+
 @app.route('/api/orcamentos')
 def api_orcamentos():
     orcamentos = load_orcamentos()
@@ -295,15 +299,15 @@ def atualizar_graficos():
     wb = load_workbook(EXCEL_FILE)
     if "Gráficos" not in wb.sheetnames:
         ws_chart = wb.create_sheet("Gráficos")
-        ws_chart.append(["Área/Projeto", "Horas Trabalhadas", "Horas Orçadas", "Horas Restantes"])
+        ws_chart.append(["Área/Projeto", "Horas Trabalhadas", "Horas Orçadas", "Horas Restantes", "Percentual (%)"])
         # Formatar cabeçalhos
         from openpyxl.styles import Font, Alignment
-        for col_num, header in enumerate(["Área/Projeto", "Horas Trabalhadas", "Horas Orçadas", "Horas Restantes"], 1):
+        for col_num, header in enumerate(["Área/Projeto", "Horas Trabalhadas", "Horas Orçadas", "Horas Restantes", "Percentual (%)"], 1):
             cell = ws_chart.cell(row=1, column=col_num)
             cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal='center')
         # Ajustar larguras das colunas
-        column_widths = [30, 15, 15, 15]
+        column_widths = [30, 15, 15, 15, 15]
         for i, width in enumerate(column_widths, 1):
             ws_chart.column_dimensions[ws_chart.cell(row=1, column=i).column_letter].width = width
     else:
@@ -355,7 +359,7 @@ def atualizar_graficos():
 
     # Create table for filterability
     from openpyxl.worksheet.table import Table, TableStyleInfo
-    tab_ref = f"A1:D{row-1}"
+    tab_ref = f"A1:E{row-1}"
     # Remove existing table to avoid name conflicts
     if "DadosGraficos" in ws_chart.tables:
         del ws_chart.tables["DadosGraficos"]
@@ -365,21 +369,49 @@ def atualizar_graficos():
     table.tableStyleInfo = style
     ws_chart.add_table(table)
 
-    # Add or update chart
+    # Add or update charts
     # Remove existing charts
     ws_chart._charts = []
-    chart = BarChart()
-    chart.title = "Horas Trabalhadas vs Orçadas"
-    chart.y_axis.title = "Horas"
-    chart.x_axis.title = "Área/Projeto"
-    data = Reference(ws_chart, min_col=2, min_row=1, max_col=4, max_row=row-1)
-    cats = Reference(ws_chart, min_col=1, min_row=2, max_row=row-1)
-    chart.add_data(data, titles_from_data=True)
-    chart.set_categories(cats)
-    # Note: Chart colors can be customized in Excel after opening the file
-    ws_chart.add_chart(chart, "F2")
+
+    if 'bar' in CHARTS:
+        # Bar chart
+        bar_chart = BarChart()
+        bar_chart.title = "Horas Trabalhadas vs Orçadas"
+        bar_chart.y_axis.title = "Horas"
+        bar_chart.x_axis.title = "Área/Projeto"
+        data = Reference(ws_chart, min_col=2, min_row=1, max_col=4, max_row=row-1)
+        cats = Reference(ws_chart, min_col=1, min_row=2, max_row=row-1)
+        bar_chart.add_data(data, titles_from_data=True)
+        bar_chart.set_categories(cats)
+        ws_chart.add_chart(bar_chart, "F2")
+
+    if 'doughnut' in CHARTS:
+        # Doughnut chart for percentage completion
+        doughnut_chart = DoughnutChart()
+        doughnut_chart.title = "Percentual de Conclusão"
+        # Calculate percentage: (trabalhadas / orcadas) * 100
+        # Add a new column for percentage
+        ws_chart.cell(row=1, column=5).value = "Percentual (%)"
+        for r in range(2, row):
+            trabalhadas = ws_chart.cell(row=r, column=2).value
+            orcadas = ws_chart.cell(row=r, column=3).value
+            if orcadas > 0:
+                percent = (trabalhadas / orcadas) * 100
+                ws_chart.cell(row=r, column=5).value = round(percent, 2)
+                ws_chart.cell(row=r, column=5).number_format = '0.00'
+            else:
+                ws_chart.cell(row=r, column=5).value = 0
+
+        # Doughnut data: Percentual and remaining
+        percent_data = Reference(ws_chart, min_col=5, min_row=2, max_row=row-1)
+        remaining_data = Reference(ws_chart, min_col=4, min_row=2, max_row=row-1)  # Restantes
+        doughnut_chart.add_data(percent_data, titles_from_data=False)
+        doughnut_chart.add_data(remaining_data, titles_from_data=False)
+        doughnut_chart.set_categories(cats)
+        ws_chart.add_chart(doughnut_chart, "F20")
 
     wb.save(EXCEL_FILE)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
