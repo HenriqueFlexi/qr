@@ -28,5 +28,17 @@
     "projeto": "TDS",
     "numeroProjeto": "15",
     "horasOrcadas": 30
+  },
+  {
+    "area": "Marcenaria Estrutural",
+    "projeto": "TDS",
+    "numeroProjeto": "5",
+    "horasOrcadas": 30
+  },
+  {
+    "area": "Elétrica",
+    "projeto": "OBS",
+    "numeroProjeto": "2",
+    "horasOrcadas": 35
   }
 ]
