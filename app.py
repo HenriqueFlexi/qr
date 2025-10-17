@@ -291,6 +291,57 @@ def api_orcamentos():
     orcamentos = load_orcamentos()
     return jsonify(orcamentos)
 
+@app.route('/admin/export_to_excel', methods=['POST'])
+def export_to_excel():
+    try:
+        # Fetch data from Supabase
+        response = supabase.table('registros').select('*').execute()
+        registros = response.data
+
+        # Load or create Excel file
+        criar_planilha_se_nao_existir()
+        wb = load_workbook(EXCEL_FILE)
+        ws = wb["Registros"]
+
+        # Clear existing data except header
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.value = None
+
+        # Populate with Supabase data
+        for reg in registros:
+            nova_linha = [
+                reg.get('data'),
+                reg.get('id'),
+                reg.get('nome'),
+                reg.get('area'),
+                reg.get('projeto'),
+                reg.get('numero_projeto'),
+                reg.get('hora_inicio'),
+                reg.get('hora_fim'),
+                reg.get('acao')
+            ]
+            ws.append(nova_linha)
+
+        # Update charts
+        atualizar_graficos()
+
+        wb.save(EXCEL_FILE)
+        return jsonify({"status": "ok", "message": "Dados exportados para Excel com sucesso."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Erro ao exportar: {str(e)}"})
+
+@app.route('/admin/download_excel')
+def download_excel():
+    try:
+        return Response(
+            open(EXCEL_FILE, 'rb').read(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={"Content-Disposition": "attachment;filename=registros.xlsx"}
+        )
+    except FileNotFoundError:
+        return jsonify({"status": "error", "message": "Arquivo Excel não encontrado."})
+
 @app.route('/qrcodes')
 def qrcodes():
     return render_template('qrcodes.html')
