@@ -2,16 +2,24 @@ const readerDiv = document.getElementById("reader");
 const formContainer = document.getElementById("formContainer");
 
 let currentUser = null;
+let html5QrCode = null;
+let currentFacingMode = "user"; // Inicia com frontal
 
 function dataHoje() {
     return new Date().toISOString().slice(0, 10);
 }
 
 function iniciarLeitor() {
-    const html5QrCode = new Html5Qrcode("reader");
+    if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+            html5QrCode.clear();
+        }).catch(err => console.error("Erro ao parar câmera:", err));
+    }
+
+    html5QrCode = new Html5Qrcode("reader");
 
     html5QrCode.start(
-        { facingMode: "environment" },
+        { facingMode: { ideal: currentFacingMode } },
         { fps: 10, qrbox: 250 },
         async (decodedText) => {
             try {
@@ -121,6 +129,12 @@ async function enviarFormulario(e) {
 window.onload = () => {
     iniciarLeitor();
 };
+
+// Toggle camera functionality
+document.getElementById('toggleCameraBtn').addEventListener('click', () => {
+    currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+    iniciarLeitor();
+});
 
 // Admin login functionality
 document.getElementById('adminBtn').addEventListener('click', () => {
