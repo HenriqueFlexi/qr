@@ -10,16 +10,24 @@ function dataHoje() {
 }
 
 function iniciarLeitor() {
-    if (html5QrCode) {
+    console.log("iniciarLeitor called");
+    // Clear any previous error messages
+    const errorDiv = document.getElementById("cameraError");
+    if (errorDiv) {
+        errorDiv.remove();
+    }
+
+    if (html5QrCode && html5QrCode.isScanning()) {
         html5QrCode.stop().then(() => {
             html5QrCode.clear();
+            html5QrCode = null; // Reset instance
         }).catch(err => console.error("Erro ao parar câmera:", err));
     }
 
     html5QrCode = new Html5Qrcode("reader");
 
     html5QrCode.start(
-        { facingMode: { ideal: currentFacingMode } },
+        { facingMode: currentFacingMode },
         { fps: 10, qrbox: 250 },
         async (decodedText) => {
             try {
@@ -87,6 +95,23 @@ function iniciarLeitor() {
         (error) => { /* Ignora erros */ }
     ).catch(err => {
         console.error("Erro ao iniciar câmera:", err);
+        // Display error message to user
+        const readerDiv = document.getElementById("reader");
+        const errorDiv = document.createElement("div");
+        errorDiv.id = "cameraError";
+        errorDiv.style.color = "#ff6b6b";
+        errorDiv.style.textAlign = "center";
+        errorDiv.style.padding = "20px";
+        errorDiv.innerHTML = `
+            <p>Erro ao acessar a câmera. Verifique se as permissões estão concedidas e se o dispositivo tem câmera disponível.</p>
+            <button id="retryCameraBtn" style="padding: 10px 20px; background-color: #64ffda; color: #0a192f; border: none; border-radius: 8px; cursor: pointer; font-weight: 700;">Tentar Novamente</button>
+        `;
+        readerDiv.appendChild(errorDiv);
+        const retryBtn = errorDiv.querySelector("#retryCameraBtn");
+        retryBtn.addEventListener("click", () => {
+            console.log("Retry button clicked");
+            iniciarLeitor();
+        });
     });
 }
 
