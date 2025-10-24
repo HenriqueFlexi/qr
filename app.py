@@ -385,12 +385,13 @@ def atualizar_graficos():
             except:
                 pass
 
-    # Populate chart sheet
+    # Create a dict of budgets by key
+    orcamentos_dict = {f"{orc['area']} - {orc['projeto']} - {orc['numeroProjeto']}": orc['horasOrcadas'] for orc in orcamentos}
+
+    # Populate chart sheet with all projects that have worked hours, even without budgets
     row = 2
-    for orc in orcamentos:
-        key = f"{orc['area']} - {orc['projeto']} - {orc['numeroProjeto']}"
-        trabalhadas = horas_trabalhadas.get(key, 0)
-        orcadas = orc['horasOrcadas']
+    for key, trabalhadas in horas_trabalhadas.items():
+        orcadas = orcamentos_dict.get(key, 0)  # Default to 0 if no budget
         restantes = max(0, orcadas - trabalhadas)
         ws_chart.cell(row=row, column=1).value = key
         ws_chart.cell(row=row, column=2).value = round(trabalhadas, 2)

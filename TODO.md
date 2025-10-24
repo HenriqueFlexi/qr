@@ -1,15 +1,13 @@
-# TODO: Adicionar funcionalidade de exportar dados do Supabase para Excel na página Admin
+# TODO: Fix worked hours not appearing in chart
 
 ## Tarefas Pendentes:
-- [x] Adicionar rota `/admin/export_to_excel` no app.py para buscar dados do Supabase e atualizar o Excel com eles.
-- [x] Adicionar rota `/admin/download_excel` no app.py para permitir o download do arquivo Excel.
-- [x] Atualizar templates/admin.html para incluir uma seção "Exportar Dados para Excel" com botões para exportar e baixar.
-- [ ] Testar a funcionalidade de exportar e baixar o Excel.
+- [x] Modify `atualizar_graficos()` in app.py to include all projects with worked hours, even without budgets.
+- [x] Set budgeted hours to 0 for projects without budgets.
+- [ ] Test chart generation to ensure worked hours appear.
 
 ## Dependências:
-- app.py: Adicionar novas rotas.
-- templates/admin.html: Adicionar seção de exportar.
+- app.py: Update the atualizar_graficos function.
 
 ## Notas:
-- A exportação deve transferir os dados do Supabase para o Excel, permitindo ao admin adicionar horas e analisar gráficos.
-- O sistema roda em tablet, mas o admin visualiza em computador.
+- Currently, only projects with budgets in orcamentos.json appear in charts.
+- Need to collect all unique project keys from worked hours first.
