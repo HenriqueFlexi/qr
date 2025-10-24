@@ -66,6 +66,20 @@ def criar_planilha_se_nao_existir():
         for i, width in enumerate(column_widths, 1):
             ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = width
 
+        # Criar aba de orçamentos
+        ws_orc = wb.create_sheet("Orçamentos")
+        ws_orc.append(["Área", "Projeto", "Número Projeto", "Horas Orçadas"])
+        # Formatar cabeçalhos
+        from openpyxl.styles import Font, Alignment
+        for col_num, header in enumerate(["Área", "Projeto", "Número Projeto", "Horas Orçadas"], 1):
+            cell = ws_orc.cell(row=1, column=col_num)
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal='center')
+        # Ajustar larguras das colunas
+        column_widths = [20, 20, 20, 15]
+        for i, width in enumerate(column_widths, 1):
+            ws_orc.column_dimensions[ws_orc.cell(row=1, column=i).column_letter].width = width
+
         # Criar aba de gráficos
         ws_chart = wb.create_sheet("Gráficos")
         ws_chart.append(["Área/Projeto", "Horas Trabalhadas", "Horas Orçadas", "Horas Restantes", "Percentual (%)"])
@@ -82,7 +96,8 @@ def criar_planilha_se_nao_existir():
 
         wb.save(EXCEL_FILE)
     else:
-        # Atualizar gráficos sempre que salvar
+        # Atualizar orçamentos e gráficos sempre que salvar
+        atualizar_orcamentos()
         atualizar_graficos()
 
 @app.route('/')
@@ -147,6 +162,7 @@ def registrar():
 
     try:
         wb.save(EXCEL_FILE)
+        atualizar_orcamentos()
         atualizar_graficos()
 
         # Sync to Supabase for testing
@@ -270,10 +286,12 @@ def add_orcamento():
         if o['area'] == area and o['projeto'] == projeto and o['numeroProjeto'] == numeroProjeto:
             o['horasOrcadas'] = horasOrcadas
             save_orcamentos(orcamentos)
+            atualizar_orcamentos()
             atualizar_graficos()
             return jsonify({"status": "ok"})
     orcamentos.append({"area": area, "projeto": projeto, "numeroProjeto": numeroProjeto, "horasOrcadas": horasOrcadas})
     save_orcamentos(orcamentos)
+    atualizar_orcamentos()
     atualizar_graficos()
     return jsonify({"status": "ok"})
 
@@ -346,6 +364,49 @@ def download_excel():
 def qrcodes():
     return render_template('qrcodes.html')
 
+def atualizar_orcamentos():
+    wb = load_workbook(EXCEL_FILE)
+    if "Orçamentos" not in wb.sheetnames:
+        ws_orc = wb.create_sheet("Orçamentos")
+        ws_orc.append(["Área", "Projeto", "Número Projeto", "Horas Orçadas"])
+        # Formatar cabeçalhos
+        from openpyxl.styles import Font, Alignment
+        for col_num, header in enumerate(["Área", "Projeto", "Número Projeto", "Horas Orçadas"], 1):
+            cell = ws_orc.cell(row=1, column=col_num)
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal='center')
+        # Ajustar larguras das colunas
+        column_widths = [20, 20, 20, 15]
+        for i, width in enumerate(column_widths, 1):
+            ws_orc.column_dimensions[ws_orc.cell(row=1, column=i).column_letter].width = width
+    else:
+        ws_orc = wb["Orçamentos"]
+        # Clear existing data except header
+        for row in ws_orc.iter_rows(min_row=2):
+            for cell in row:
+                cell.value = None
+
+    orcamentos = load_orcamentos()
+
+    # Populate orcamentos sheet
+    row = 2
+    for orc in orcamentos:
+        ws_orc.cell(row=row, column=1).value = orc['area']
+        ws_orc.cell(row=row, column=2).value = orc['projeto']
+        ws_orc.cell(row=row, column=3).value = orc['numeroProjeto']
+        ws_orc.cell(row=row, column=4).value = orc['horasOrcadas']
+        # Formatar células numéricas
+        ws_orc.cell(row=row, column=4).number_format = '0'
+        row += 1
+
+    # Remove extra rows with None
+    max_row = ws_orc.max_row
+    while max_row > 1 and all(cell.value is None for cell in ws_orc[max_row]):
+        ws_orc.delete_rows(max_row)
+        max_row -= 1
+
+    wb.save(EXCEL_FILE)
+
 def atualizar_graficos():
     wb = load_workbook(EXCEL_FILE)
     if "Gráficos" not in wb.sheetnames:
@@ -399,10 +460,14 @@ def atualizar_graficos():
     # Create a dict of budgets by key
     orcamentos_dict = {f"{orc['area']} - {orc['projeto']} - {orc['numeroProjeto']}": orc['horasOrcadas'] for orc in orcamentos}
 
-    # Populate chart sheet with all projects that have worked hours, even without budgets
+    # Collect all unique project keys from both worked hours and budgets
+    all_keys = set(horas_trabalhadas.keys()) | set(orcamentos_dict.keys())
+
+    # Populate chart sheet with all projects that have worked hours or budgets
     row = 2
-    for key, trabalhadas in horas_trabalhadas.items():
-        orcadas = orcamentos_dict.get(key, 0)  # Default to 0 if no budget
+    for key in sorted(all_keys):  # Sort for consistent ordering
+        trabalhadas = horas_trabalhadas.get(key, 0)
+        orcadas = orcamentos_dict.get(key, 0)
         restantes = max(0, orcadas - trabalhadas)
         ws_chart.cell(row=row, column=1).value = key
         ws_chart.cell(row=row, column=2).value = round(trabalhadas, 2)
@@ -420,58 +485,59 @@ def atualizar_graficos():
         ws_chart.delete_rows(max_row)
         max_row -= 1
 
+    # Temporarily commented out table and chart creation to avoid file corruption
     # Create table for filterability
-    from openpyxl.worksheet.table import Table, TableStyleInfo
-    tab_ref = f"A1:E{row-1}"
-    # Remove existing table to avoid name conflicts
-    if "DadosGraficos" in ws_chart.tables:
-        del ws_chart.tables["DadosGraficos"]
-    table = Table(displayName="DadosGraficos", ref=tab_ref)
-    style = TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False,
-                           showLastColumn=False, showRowStripes=True, showColumnStripes=True)
-    table.tableStyleInfo = style
-    ws_chart.add_table(table)
+    # from openpyxl.worksheet.table import Table, TableStyleInfo
+    # tab_ref = f"A1:E{row-1}"
+    # # Remove existing table to avoid name conflicts
+    # if "DadosGraficos" in ws_chart.tables:
+    #     del ws_chart.tables["DadosGraficos"]
+    # table = Table(displayName="DadosGraficos", ref=tab_ref)
+    # style = TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False,
+    #                        showLastColumn=False, showRowStripes=True, showColumnStripes=True)
+    # table.tableStyleInfo = style
+    # ws_chart.add_table(table)
 
-    # Add or update charts
-    # Remove existing charts
-    ws_chart._charts = []
+    # # Add or update charts
+    # # Remove existing charts
+    # ws_chart._charts = []
 
-    if 'bar' in CHARTS:
-        # Bar chart
-        bar_chart = BarChart()
-        bar_chart.title = "Horas Trabalhadas vs Orçadas"
-        bar_chart.y_axis.title = "Horas"
-        bar_chart.x_axis.title = "Área/Projeto"
-        data = Reference(ws_chart, min_col=2, min_row=1, max_col=4, max_row=row-1)
-        cats = Reference(ws_chart, min_col=1, min_row=2, max_row=row-1)
-        bar_chart.add_data(data, titles_from_data=True)
-        bar_chart.set_categories(cats)
-        ws_chart.add_chart(bar_chart, "F2")
+    # if 'bar' in CHARTS:
+    #     # Bar chart
+    #     bar_chart = BarChart()
+    #     bar_chart.title = "Horas Trabalhadas vs Orçadas"
+    #     bar_chart.y_axis.title = "Horas"
+    #     bar_chart.x_axis.title = "Área/Projeto"
+    #     data = Reference(ws_chart, min_col=2, min_row=1, max_col=4, max_row=row-1)
+    #     cats = Reference(ws_chart, min_col=1, min_row=2, max_row=row-1)
+    #     bar_chart.add_data(data, titles_from_data=True)
+    #     bar_chart.set_categories(cats)
+    #     ws_chart.add_chart(bar_chart, "F2")
 
-    if 'doughnut' in CHARTS:
-        # Doughnut chart for percentage completion
-        doughnut_chart = DoughnutChart()
-        doughnut_chart.title = "Percentual de Conclusão"
-        # Calculate percentage: (trabalhadas / orcadas) * 100
-        # Add a new column for percentage
-        ws_chart.cell(row=1, column=5).value = "Percentual (%)"
-        for r in range(2, row):
-            trabalhadas = ws_chart.cell(row=r, column=2).value
-            orcadas = ws_chart.cell(row=r, column=3).value
-            if orcadas > 0:
-                percent = (trabalhadas / orcadas) * 100
-                ws_chart.cell(row=r, column=5).value = round(percent, 2)
-                ws_chart.cell(row=r, column=5).number_format = '0.00'
-            else:
-                ws_chart.cell(row=r, column=5).value = 0
+    # if 'doughnut' in CHARTS:
+    #     # Doughnut chart for percentage completion
+    #     doughnut_chart = DoughnutChart()
+    #     doughnut_chart.title = "Percentual de Conclusão"
+    #     # Calculate percentage: (trabalhadas / orcadas) * 100
+    #     # Add a new column for percentage
+    #     ws_chart.cell(row=1, column=5).value = "Percentual (%)"
+    #     for r in range(2, row):
+    #         trabalhadas = ws_chart.cell(row=r, column=2).value
+    #         orcadas = ws_chart.cell(row=r, column=3).value
+    #         if orcadas > 0:
+    #             percent = (trabalhadas / orcadas) * 100
+    #             ws_chart.cell(row=r, column=5).value = round(percent, 2)
+    #             ws_chart.cell(row=r, column=5).number_format = '0.00'
+    #         else:
+    #             ws_chart.cell(row=r, column=5).value = 0
 
-        # Doughnut data: Percentual and remaining
-        percent_data = Reference(ws_chart, min_col=5, min_row=2, max_row=row-1)
-        remaining_data = Reference(ws_chart, min_col=4, min_row=2, max_row=row-1)  # Restantes
-        doughnut_chart.add_data(percent_data, titles_from_data=False)
-        doughnut_chart.add_data(remaining_data, titles_from_data=False)
-        doughnut_chart.set_categories(cats)
-        ws_chart.add_chart(doughnut_chart, "F20")
+    #     # Doughnut data: Percentual and remaining
+    #     percent_data = Reference(ws_chart, min_col=5, min_row=2, max_row=row-1)
+    #     remaining_data = Reference(ws_chart, min_col=4, min_row=2, max_row=row-1)  # Restantes
+    #     doughnut_chart.add_data(percent_data, titles_from_data=False)
+    #     doughnut_chart.add_data(remaining_data, titles_from_data=False)
+    #     doughnut_chart.set_categories(cats)
+    #     ws_chart.add_chart(doughnut_chart, "F20")
 
     wb.save(EXCEL_FILE)
 
