@@ -369,12 +369,23 @@ def atualizar_graficos():
                 cell.value = None
 
     orcamentos = load_orcamentos()
-    ws_reg = wb["Registros"]
 
-    # Calculate hours worked per area/projeto/numero
+    # Fetch registros from Supabase
+    try:
+        response = supabase.table('registros').select('*').execute()
+        registros = response.data
+    except Exception as e:
+        print(f"Erro ao buscar dados do Supabase: {e}")
+        registros = []
+
+    # Calculate hours worked per area/projeto/numero from Supabase data
     horas_trabalhadas = {}
-    for row in ws_reg.iter_rows(min_row=2, values_only=True):
-        c_data, c_id, c_nome, c_area, c_proj, c_num, c_inicio, c_fim, c_acao = row
+    for reg in registros:
+        c_area = reg.get('area')
+        c_proj = reg.get('projeto')
+        c_num = reg.get('numero_projeto')
+        c_inicio = reg.get('hora_inicio')
+        c_fim = reg.get('hora_fim')
         if c_inicio and c_fim and c_area and c_proj and c_num:
             try:
                 inicio = datetime.strptime(c_inicio, "%H:%M")
