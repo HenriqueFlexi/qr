@@ -158,29 +158,29 @@ def registrar():
     nova_linha = [
         hoje, idf, nome, area, projeto, numero, hora_inicio, hora_fim, "registro"
     ]
-    ws.append(nova_linha)
 
+    # First, try to insert into Supabase
+    try:
+        supabase.table('registros').insert({
+            'data': hoje,
+            'id_funcionario': idf,
+            'nome': nome,
+            'area': area,
+            'projeto': projeto,
+            'numero_projeto': numero,
+            'hora_inicio': hora_inicio,
+            'hora_fim': hora_fim,
+            'acao': "registro"
+        }).execute()
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Erro ao salvar no Supabase: {str(e)}"})
+
+    # If Supabase succeeds, then save to Excel
+    ws.append(nova_linha)
     try:
         wb.save(EXCEL_FILE)
         atualizar_orcamentos()
         atualizar_graficos()
-
-        # Sync to Supabase for testing
-        try:
-            supabase.table('registros').insert({
-                'data': hoje,
-                'id': idf,
-                'nome': nome,
-                'area': area,
-                'projeto': projeto,
-                'numero_projeto': numero,
-                'hora_inicio': hora_inicio,
-                'hora_fim': hora_fim,
-                'acao': "registro"
-            }).execute()
-        except Exception as e:
-            print(f"Erro ao sincronizar com Supabase: {e}")
-
         return jsonify({"status": "ok", "acao": "registro"})
     except PermissionError:
         return jsonify({"status": "error", "message": "Erro ao salvar no Excel. Verifique se o arquivo está aberto."})
@@ -330,7 +330,7 @@ def export_to_excel():
         for reg in registros:
             nova_linha = [
                 reg.get('data'),
-                reg.get('id'),
+                reg.get('id_funcionario'),
                 reg.get('nome'),
                 reg.get('area'),
                 reg.get('projeto'),
