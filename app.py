@@ -104,13 +104,14 @@ def criar_planilha_se_nao_existir():
 
 @app.route('/')
 def index():
-    criar_planilha_se_nao_existir()
     return render_template('index.html')
 
 @app.route('/verificar', methods=['POST'])
 def verificar():
+    if not os.path.exists(EXCEL_FILE):
+        return jsonify({"status": "error", "message": "Planilha não encontrada. Faça o download inicial no painel admin."})
+
     data_req = request.get_json()
-    criar_planilha_se_nao_existir()
 
     wb = load_workbook(EXCEL_FILE)
     ws = wb["Registros"]
@@ -141,8 +142,10 @@ def verificar():
 
 @app.route('/registrar', methods=['POST'])
 def registrar():
+    if not os.path.exists(EXCEL_FILE):
+        return jsonify({"status": "error", "message": "Planilha não encontrada. Faça o download inicial no painel admin."})
+
     data = request.get_json()
-    criar_planilha_se_nao_existir()
 
     wb = load_workbook(EXCEL_FILE)
     ws = wb["Registros"]
