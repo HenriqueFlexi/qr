@@ -441,11 +441,21 @@ def atualizar_graficos():
 
     orcamentos = load_orcamentos()
 
-    # Calculate hours worked from the "Registros" sheet
-    ws_reg = wb["Registros"]
+    # Calculate hours worked from Supabase instead of local Excel
+    try:
+        response = supabase.table('registros').select('*').execute()
+        registros = response.data
+    except Exception as e:
+        print(f"Erro ao buscar dados do Supabase: {e}")
+        registros = []
+
     horas_trabalhadas = {}
-    for row in ws_reg.iter_rows(min_row=2, values_only=True):
-        c_data, c_id, c_nome, c_area, c_proj, c_num, c_inicio, c_fim, c_acao = row
+    for reg in registros:
+        c_area = reg.get('area')
+        c_proj = reg.get('projeto')
+        c_num = reg.get('numero_projeto')
+        c_inicio = reg.get('hora_inicio')
+        c_fim = reg.get('hora_fim')
         if c_inicio and c_fim and c_area and c_proj and c_num:
             try:
                 inicio = datetime.strptime(c_inicio, "%H:%M")
@@ -459,10 +469,10 @@ def atualizar_graficos():
     # Create a dict of budgets by key
     orcamentos_dict = {f"{orc['area']} - {orc['projeto']} - {orc['numeroProjeto']}": orc['horasOrcadas'] for orc in orcamentos}
 
-    # Collect all unique project keys from both worked hours and budgets
-    all_keys = set(horas_trabalhadas.keys()) | set(orcamentos_dict.keys())
+    # Only include projects that have budgets (orcamentos)
+    all_keys = set(orcamentos_dict.keys())
 
-    # Populate chart sheet with all projects that have worked hours or budgets
+    # Populate chart sheet only with projects that have budgets
     row = 2
     for key in sorted(all_keys):  # Sort for consistent ordering
         trabalhadas = horas_trabalhadas.get(key, 0)
