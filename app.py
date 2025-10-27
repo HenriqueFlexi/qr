@@ -97,7 +97,9 @@ def criar_planilha_se_nao_existir():
         wb.save(EXCEL_FILE)
     else:
         # Atualizar orçamentos e gráficos sempre que salvar
-        atualizar_orcamentos()
+        wb = load_workbook(EXCEL_FILE)
+        atualizar_orcamentos(wb)
+        wb.save(EXCEL_FILE)
         atualizar_graficos()
 
 @app.route('/')
@@ -179,13 +181,14 @@ def registrar():
     ws.append(nova_linha)
     try:
         wb.save(EXCEL_FILE)
-        atualizar_orcamentos()
+        atualizar_orcamentos(wb)
+        wb.save(EXCEL_FILE)
         atualizar_graficos()
         return jsonify({"status": "ok", "acao": "registro"})
     except PermissionError:
         return jsonify({"status": "error", "message": "Erro ao salvar no Excel. Verifique se o arquivo está aberto."})
 
-@app.route('/static/config.js')
+@app.route('/config.js')
 def config_js():
     import json
     areas_json = json.dumps(AREAS)
@@ -286,12 +289,16 @@ def add_orcamento():
         if o['area'] == area and o['projeto'] == projeto and o['numeroProjeto'] == numeroProjeto:
             o['horasOrcadas'] = horasOrcadas
             save_orcamentos(orcamentos)
-            atualizar_orcamentos()
+            wb = load_workbook(EXCEL_FILE)
+            atualizar_orcamentos(wb)
+            wb.save(EXCEL_FILE)
             atualizar_graficos()
             return jsonify({"status": "ok"})
     orcamentos.append({"area": area, "projeto": projeto, "numeroProjeto": numeroProjeto, "horasOrcadas": horasOrcadas})
     save_orcamentos(orcamentos)
-    atualizar_orcamentos()
+    wb = load_workbook(EXCEL_FILE)
+    atualizar_orcamentos(wb)
+    wb.save(EXCEL_FILE)
     atualizar_graficos()
     return jsonify({"status": "ok"})
 
@@ -325,6 +332,12 @@ def export_to_excel():
         for row in ws.iter_rows(min_row=2):
             for cell in row:
                 cell.value = None
+
+        # Remove extra rows with None
+        max_row = ws.max_row
+        while max_row > 1 and all(cell.value is None for cell in ws[max_row]):
+            ws.delete_rows(max_row)
+            max_row -= 1
 
         # Populate with Supabase data
         for reg in registros:
@@ -364,8 +377,7 @@ def download_excel():
 def qrcodes():
     return render_template('qrcodes.html')
 
-def atualizar_orcamentos():
-    wb = load_workbook(EXCEL_FILE)
+def atualizar_orcamentos(wb):
     if "Orçamentos" not in wb.sheetnames:
         ws_orc = wb.create_sheet("Orçamentos")
         ws_orc.append(["Área", "Projeto", "Número Projeto", "Horas Orçadas"])
@@ -405,8 +417,6 @@ def atualizar_orcamentos():
         ws_orc.delete_rows(max_row)
         max_row -= 1
 
-    wb.save(EXCEL_FILE)
-
 def atualizar_graficos():
     wb = load_workbook(EXCEL_FILE)
     if "Gráficos" not in wb.sheetnames:
@@ -431,22 +441,11 @@ def atualizar_graficos():
 
     orcamentos = load_orcamentos()
 
-    # Fetch registros from Supabase
-    try:
-        response = supabase.table('registros').select('*').execute()
-        registros = response.data
-    except Exception as e:
-        print(f"Erro ao buscar dados do Supabase: {e}")
-        registros = []
-
-    # Calculate hours worked per area/projeto/numero from Supabase data
+    # Calculate hours worked from the "Registros" sheet
+    ws_reg = wb["Registros"]
     horas_trabalhadas = {}
-    for reg in registros:
-        c_area = reg.get('area')
-        c_proj = reg.get('projeto')
-        c_num = reg.get('numero_projeto')
-        c_inicio = reg.get('hora_inicio')
-        c_fim = reg.get('hora_fim')
+    for row in ws_reg.iter_rows(min_row=2, values_only=True):
+        c_data, c_id, c_nome, c_area, c_proj, c_num, c_inicio, c_fim, c_acao = row
         if c_inicio and c_fim and c_area and c_proj and c_num:
             try:
                 inicio = datetime.strptime(c_inicio, "%H:%M")
@@ -485,61 +484,68 @@ def atualizar_graficos():
         ws_chart.delete_rows(max_row)
         max_row -= 1
 
-    # Temporarily commented out table and chart creation to avoid file corruption
-    # Create table for filterability
-    # from openpyxl.worksheet.table import Table, TableStyleInfo
-    # tab_ref = f"A1:E{row-1}"
-    # # Remove existing table to avoid name conflicts
-    # if "DadosGraficos" in ws_chart.tables:
-    #     del ws_chart.tables["DadosGraficos"]
-    # table = Table(displayName="DadosGraficos", ref=tab_ref)
-    # style = TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False,
-    #                        showLastColumn=False, showRowStripes=True, showColumnStripes=True)
-    # table.tableStyleInfo = style
-    # ws_chart.add_table(table)
+    # Add conditional formatting for visual appeal
+    if row > 2:
+        from openpyxl.formatting.rule import ColorScaleRule, DataBarRule
+        # Color scale for Percentual (%) column (column 5)
+        color_scale = ColorScaleRule(start_type='min', start_color='FF0000',  # Red for low
+                                      mid_type='percentile', mid_value=50, mid_color='FFFF00',  # Yellow for mid
+                                      end_type='max', end_color='00FF00')  # Green for high
+        ws_chart.conditional_formatting.add(f"E2:E{row-1}", color_scale)
 
-    # # Add or update charts
-    # # Remove existing charts
-    # ws_chart._charts = []
+        # Data bars for Horas Trabalhadas (column 2)
+        data_bar = DataBarRule(start_type='min', end_type='max', color="0000FF")  # Blue data bars
+        ws_chart.conditional_formatting.add(f"B2:B{row-1}", data_bar)
 
-    # if 'bar' in CHARTS:
-    #     # Bar chart
-    #     bar_chart = BarChart()
-    #     bar_chart.title = "Horas Trabalhadas vs Orçadas"
-    #     bar_chart.y_axis.title = "Horas"
-    #     bar_chart.x_axis.title = "Área/Projeto"
-    #     data = Reference(ws_chart, min_col=2, min_row=1, max_col=4, max_row=row-1)
-    #     cats = Reference(ws_chart, min_col=1, min_row=2, max_row=row-1)
-    #     bar_chart.add_data(data, titles_from_data=True)
-    #     bar_chart.set_categories(cats)
-    #     ws_chart.add_chart(bar_chart, "F2")
+        # Data bars for Horas Orçadas (column 3)
+        data_bar_orc = DataBarRule(start_type='min', end_type='max', color="00FF00")  # Green data bars
+        ws_chart.conditional_formatting.add(f"C2:C{row-1}", data_bar_orc)
 
-    # if 'doughnut' in CHARTS:
-    #     # Doughnut chart for percentage completion
-    #     doughnut_chart = DoughnutChart()
-    #     doughnut_chart.title = "Percentual de Conclusão"
-    #     # Calculate percentage: (trabalhadas / orcadas) * 100
-    #     # Add a new column for percentage
-    #     ws_chart.cell(row=1, column=5).value = "Percentual (%)"
-    #     for r in range(2, row):
-    #         trabalhadas = ws_chart.cell(row=r, column=2).value
-    #         orcadas = ws_chart.cell(row=r, column=3).value
-    #         if orcadas > 0:
-    #             percent = (trabalhadas / orcadas) * 100
-    #             ws_chart.cell(row=r, column=5).value = round(percent, 2)
-    #             ws_chart.cell(row=r, column=5).number_format = '0.00'
-    #         else:
-    #             ws_chart.cell(row=r, column=5).value = 0
+    # Add or update charts
+    # Remove existing charts
+    ws_chart._charts = []
 
-    #     # Doughnut data: Percentual and remaining
-    #     percent_data = Reference(ws_chart, min_col=5, min_row=2, max_row=row-1)
-    #     remaining_data = Reference(ws_chart, min_col=4, min_row=2, max_row=row-1)  # Restantes
-    #     doughnut_chart.add_data(percent_data, titles_from_data=False)
-    #     doughnut_chart.add_data(remaining_data, titles_from_data=False)
-    #     doughnut_chart.set_categories(cats)
-    #     ws_chart.add_chart(doughnut_chart, "F20")
+    if 'bar' in CHARTS and row > 2:
+        # Bar chart
+        bar_chart = BarChart()
+        bar_chart.title = "Horas Trabalhadas vs Orçadas"
+        bar_chart.y_axis.title = "Horas"
+        bar_chart.x_axis.title = "Área/Projeto"
+        data = Reference(ws_chart, min_col=2, min_row=2, max_col=3, max_row=row-1)
+        cats = Reference(ws_chart, min_col=1, min_row=2, max_row=row-1)
+        bar_chart.add_data(data)
+        bar_chart.set_categories(cats)
+        ws_chart.add_chart(bar_chart, "F2")
 
-    wb.save(EXCEL_FILE)
+    if 'doughnut' in CHARTS and row > 2:
+        # Doughnut chart for percentage completion
+        doughnut_chart = DoughnutChart()
+        doughnut_chart.title = "Percentual de Conclusão"
+        # Calculate percentage: (trabalhadas / orcadas) * 100
+        # Add a new column for percentage
+        ws_chart.cell(row=1, column=5).value = "Percentual (%)"
+        for r in range(2, row):
+            trabalhadas = ws_chart.cell(row=r, column=2).value
+            orcadas = ws_chart.cell(row=r, column=3).value
+            if orcadas > 0:
+                percent = (trabalhadas / orcadas) * 100
+                ws_chart.cell(row=r, column=5).value = round(percent, 2)
+                ws_chart.cell(row=r, column=5).number_format = '0.00'
+            else:
+                ws_chart.cell(row=r, column=5).value = 0
+
+        # Doughnut data: Percentual and remaining
+        percent_data = Reference(ws_chart, min_col=5, min_row=2, max_row=row-1)
+        remaining_data = Reference(ws_chart, min_col=4, min_row=2, max_row=row-1)  # Restantes
+        doughnut_chart.add_data(percent_data, titles_from_data=False)
+        doughnut_chart.add_data(remaining_data, titles_from_data=False)
+        doughnut_chart.set_categories(cats)
+        ws_chart.add_chart(doughnut_chart, "F20")
+
+    try:
+        wb.save(EXCEL_FILE)
+    except PermissionError:
+        print("Erro ao salvar Excel: arquivo aberto. As alterações não foram salvas no arquivo.")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

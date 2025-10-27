@@ -154,7 +154,7 @@
 
     <script>
         async function loadAreas() {
-            const response = await fetch('/static/config.js');
+            const response = await fetch('/config.js');
             const script = await response.text();
             eval(script);
             const areasList = document.getElementById('areasList');
@@ -171,7 +171,7 @@
         }
 
         async function loadProjetos() {
-            const response = await fetch('/static/config.js');
+            const response = await fetch('/config.js');
             const script = await response.text();
             eval(script);
             const projetosList = document.getElementById('projetosList');
@@ -303,7 +303,7 @@
         });
 
         async function populateSelects() {
-            const response = await fetch('/static/config.js');
+            const response = await fetch('/config.js');
             const script = await response.text();
             eval(script);
             const areaSelect = document.getElementById('orcamentoArea');
@@ -323,7 +323,7 @@
         }
 
         async function loadCharts() {
-            const response = await fetch('/static/config.js');
+            const response = await fetch('/config.js');
             const script = await response.text();
             eval(script);
             document.getElementById('chartBar').checked = CHARTS.includes('bar');
