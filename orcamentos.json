@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "area": "Marcenaria Estrutural",
+    "projeto": "CDS",
+    "numeroProjeto": "12",
+    "horasOrcadas": 30
+  },
+  {
+    "area": "Marcenaria Móvel",
+    "projeto": "ODS",
+    "numeroProjeto": "12",
+    "horasOrcadas": 23
+  }
+]
