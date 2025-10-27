@@ -417,6 +417,17 @@ def atualizar_orcamentos(wb):
         ws_orc.delete_rows(max_row)
         max_row -= 1
 
+def normalize_time(time_str):
+    """Normalize time string to HH:MM format"""
+    time_str = time_str.strip()
+    if ':' in time_str:
+        parts = time_str.split(':')
+        if len(parts) >= 2:
+            h = parts[0].zfill(2)
+            m = parts[1].zfill(2)
+            return f"{h}:{m}"
+    return time_str
+
 def atualizar_graficos():
     wb = load_workbook(EXCEL_FILE)
     if "Gráficos" not in wb.sheetnames:
@@ -458,12 +469,16 @@ def atualizar_graficos():
         c_fim = reg.get('hora_fim')
         if c_inicio and c_fim and c_area and c_proj and c_num:
             try:
+                # Normalize time formats to handle "8:00" or "08:00"
+                c_inicio = normalize_time(c_inicio)
+                c_fim = normalize_time(c_fim)
                 inicio = datetime.strptime(c_inicio, "%H:%M")
                 fim = datetime.strptime(c_fim, "%H:%M")
                 horas = (fim - inicio).total_seconds() / 3600
                 key = f"{c_area} - {c_proj} - {c_num}"
                 horas_trabalhadas[key] = horas_trabalhadas.get(key, 0) + horas
-            except:
+            except Exception as e:
+                print(f"Erro ao calcular horas para registro {reg}: {e}")
                 pass
 
     # Create a dict of budgets by key
