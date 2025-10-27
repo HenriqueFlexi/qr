@@ -17,7 +17,7 @@ function iniciarLeitor() {
         errorDiv.remove();
     }
 
-    if (html5QrCode && html5QrCode.isScanning()) {
+    if (html5QrCode && html5QrCode.getState() === Html5QrcodeScannerState.SCANNING) {
         html5QrCode.stop().then(() => {
             html5QrCode.clear();
             html5QrCode = null; // Reset instance
