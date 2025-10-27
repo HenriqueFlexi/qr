@@ -140,15 +140,15 @@ async function enviarFormulario(e) {
 
         if (j.status === "ok") {
             alert(`Registro de ${j.acao} salvo com sucesso!`);
+            // Reset form and restart camera automatically
+            formContainer.style.display = "none";
+            iniciarLeitor();
         } else {
             alert(j.message || "Erro ao registrar.");
         }
     } catch (err) {
         alert("Erro na requisição: " + err);
     }
-
-    formContainer.style.display = "none";
-    iniciarLeitor();
 }
 
 window.onload = () => {
