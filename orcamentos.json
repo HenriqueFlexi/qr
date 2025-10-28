@@ -10,5 +10,29 @@
     "projeto": "ODS",
     "numeroProjeto": "12",
     "horasOrcadas": 23
+  },
+  {
+    "area": "Hidráulica",
+    "projeto": "FÁBRICA",
+    "numeroProjeto": "1",
+    "horasOrcadas": 20
+  },
+  {
+    "area": "Piso",
+    "projeto": "OBS",
+    "numeroProjeto": "12",
+    "horasOrcadas": 30
+  },
+  {
+    "area": "Marcenaria Estrutural",
+    "projeto": "EXTERNO",
+    "numeroProjeto": "1",
+    "horasOrcadas": 20
+  },
+  {
+    "area": "Marcenaria Móvel",
+    "projeto": "TOT",
+    "numeroProjeto": "2",
+    "horasOrcadas": 35
   }
 ]
