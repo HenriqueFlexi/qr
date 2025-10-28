@@ -104,7 +104,6 @@ def criar_planilha_se_nao_existir():
 
 @app.route('/')
 def index():
-    criar_planilha_se_nao_existir()
     return render_template('index.html')
 
 @app.route('/verificar', methods=['POST'])
@@ -369,13 +368,54 @@ def export_to_excel():
 @app.route('/admin/download_excel')
 def download_excel():
     try:
+        # Fetch latest data from Supabase
+        response = supabase.table('registros').select('*').execute()
+        registros = response.data
+
+        # Update the local Excel file with latest data
+        criar_planilha_se_nao_existir()
+        wb = load_workbook(EXCEL_FILE)
+        ws = wb["Registros"]
+
+        # Clear existing data except header
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.value = None
+
+        # Remove extra rows with None
+        max_row = ws.max_row
+        while max_row > 1 and all(cell.value is None for cell in ws[max_row]):
+            ws.delete_rows(max_row)
+            max_row -= 1
+
+        # Populate with latest Supabase data
+        for reg in registros:
+            nova_linha = [
+                reg.get('data'),
+                reg.get('id_funcionario'),
+                reg.get('nome'),
+                reg.get('area'),
+                reg.get('projeto'),
+                reg.get('numero_projeto'),
+                reg.get('hora_inicio'),
+                reg.get('hora_fim'),
+                reg.get('acao')
+            ]
+            ws.append(nova_linha)
+
+        # Update budgets and charts
+        atualizar_orcamentos(wb)
+        atualizar_graficos()
+
+        wb.save(EXCEL_FILE)
+
         return Response(
             open(EXCEL_FILE, 'rb').read(),
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             headers={"Content-Disposition": "attachment;filename=registros.xlsx"}
         )
-    except FileNotFoundError:
-        return jsonify({"status": "error", "message": "Arquivo Excel não encontrado."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Erro ao baixar Excel: {str(e)}"})
 
 @app.route('/qrcodes')
 def qrcodes():
