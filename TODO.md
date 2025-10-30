@@ -1,22 +1,12 @@
-# TODO: Fix worked hours not appearing in chart
+# TODO: Add filtering to Excel spreadsheet registros.xlsx
 
 ## Tarefas Pendentes:
-- [x] Modify `atualizar_graficos()` in app.py to include all projects with worked hours, even without budgets.
-- [x] Set budgeted hours to 0 for projects without budgets.
-- [x] Change `atualizar_graficos()` to pull worked hours data from Supabase instead of local Excel to ensure charts reflect current data.
-- [x] Add separate `atualizar_orcamentos()` function to update the Orçamentos sheet.
-- [x] Update calls to include `atualizar_orcamentos()` alongside `atualizar_graficos()`.
-- [x] Ensure budgets appear in the Gráficos sheet with their respective information and charts.
-- [x] Temporarily disable table and chart creation to prevent Excel file corruption.
+- [ ] Modify `criar_planilha_se_nao_existir()` in app.py to add auto filters to "Registros" and "Gráficos" sheets.
+- [ ] Ensure `atualizar_graficos()` sets auto filter on "Gráficos" sheet if it exists.
 
 ## Dependências:
-- app.py: Update the atualizar_graficos function and add atualizar_orcamentos.
+- app.py: Update the functions to enable auto filters.
 
 ## Notas:
-- Currently, only projects with budgets in orcamentos.json appear in charts.
-- Need to collect all unique project keys from worked hours first.
-- Charts now include all projects with worked hours, even without budgets.
-- Orçamentos sheet is now updated separately and populated with data from orcamentos.json.
-- Budgets now appear in the Gráficos sheet with worked hours, budgeted hours, remaining hours, and percentage completion.
-- Charts are generated for all projects that have budgets or worked hours.
-- Table and chart creation has been temporarily commented out to avoid Excel file corruption. The data is still populated correctly in the "Gráficos" sheet.
+- Auto filters will allow manual filtering in Excel by project, name, etc. in Registros tab.
+- In Gráficos tab, filtering data will affect visible rows; charts are static but can be made dynamic in Excel.

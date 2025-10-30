@@ -66,6 +66,9 @@ def criar_planilha_se_nao_existir():
         for i, width in enumerate(column_widths, 1):
             ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = width
 
+        # Adicionar filtro automático à aba Registros
+        ws.auto_filter.ref = ws.dimensions
+
         # Criar aba de orçamentos
         ws_orc = wb.create_sheet("Orçamentos")
         ws_orc.append(["Área", "Projeto", "Número Projeto", "Horas Orçadas"])
@@ -94,10 +97,17 @@ def criar_planilha_se_nao_existir():
         for i, width in enumerate(column_widths, 1):
             ws_chart.column_dimensions[ws_chart.cell(row=1, column=i).column_letter].width = width
 
+        # Adicionar filtro automático à aba Gráficos
+        ws_chart.auto_filter.ref = ws_chart.dimensions
+
         wb.save(EXCEL_FILE)
     else:
         # Atualizar orçamentos e gráficos sempre que salvar
         wb = load_workbook(EXCEL_FILE)
+        ws = wb["Registros"]
+        # Adicionar filtro automático se não existir
+        if not ws.auto_filter.ref:
+            ws.auto_filter.ref = ws.dimensions
         atualizar_orcamentos(wb)
         wb.save(EXCEL_FILE)
         atualizar_graficos()
@@ -182,6 +192,8 @@ def registrar():
 
     # If Supabase succeeds, then save to Excel
     ws.append(nova_linha)
+    # Atualizar filtro automático para cobrir toda a planilha
+    ws.auto_filter.ref = ws.dimensions
     try:
         wb.save(EXCEL_FILE)
         atualizar_orcamentos(wb)
@@ -342,6 +354,10 @@ def export_to_excel():
             ws.delete_rows(max_row)
             max_row -= 1
 
+        # Adicionar filtro automático se não existir
+        if not ws.auto_filter.ref:
+            ws.auto_filter.ref = ws.dimensions
+
         # Populate with Supabase data
         for reg in registros:
             nova_linha = [
@@ -474,6 +490,9 @@ def normalize_time(time_str):
 
 def atualizar_graficos():
     wb = load_workbook(EXCEL_FILE)
+    # Ensure auto filter is set for Registros sheet
+    ws_reg = wb["Registros"]
+    ws_reg.auto_filter.ref = ws_reg.dimensions
     if "Gráficos" not in wb.sheetnames:
         ws_chart = wb.create_sheet("Gráficos")
         ws_chart.append(["Área/Projeto", "Horas Trabalhadas", "Horas Orçadas", "Horas Restantes", "Percentual (%)"])
@@ -489,6 +508,9 @@ def atualizar_graficos():
             ws_chart.column_dimensions[ws_chart.cell(row=1, column=i).column_letter].width = width
     else:
         ws_chart = wb["Gráficos"]
+        # Adicionar filtro automático se não existir
+        if not ws_chart.auto_filter.ref:
+            ws_chart.auto_filter.ref = ws_chart.dimensions
         # Clear existing data except header
         for row in ws_chart.iter_rows(min_row=2):
             for cell in row:
